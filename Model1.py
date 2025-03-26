@@ -1,9 +1,10 @@
 import pandas as pd
 from datetime import date
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split,TimeSeriesSplit
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score,root_mean_squared_error
 import numpy as np
+import matplotlib.pyplot as plt
 
 df = pd.read_csv('marketing_mix.csv')
 
@@ -50,7 +51,7 @@ intercept = model.intercept_
 # Create a DataFrame for better visualization
 coef_df = pd.DataFrame({
     'Feature': feature_names,
-    'Coefficient': coefficients
+    'Coefficient_1': coefficients
 })
 
 print("Intercept (Base Sales):", intercept)
@@ -114,7 +115,7 @@ coef_df2 = pd.DataFrame({
 })
 
 print("Intercept (Base Sales):", intercept2)
-print("\nCoefficients:\n", coef_df2)
+print("\nCoefficients_2:\n", coef_df2)
 
 print(f"Mean Absolute Error (MAE): {mae}")
 print(f"Mean Squared Error (MSE): {mse}")
@@ -167,8 +168,70 @@ coef_df_s = pd.DataFrame({
 })
 
 # Display results
-print("Coefficients:\n", coef_df_s)
+print("Coefficients_s:\n", coef_df_s)
 print(f"Mean Absolute Error (MAE): {mae}")
 print(f"Mean Squared Error (MSE): {mse}")
 print(f"Root Mean Squared Error (RMSE): {rmse}")
 print(f"R-squared (R2): {r2}")
+
+# Initialize time series cross-validator (5 splits as an example)
+tscv = TimeSeriesSplit(n_splits=5)
+
+# Initialize lists to store metrics for each split
+mae_scores, mse_scores, rmse_scores, r2_scores = [], [], [], []
+
+# Perform time series cross-validation
+for train_index, test_index in tscv.split(X_seasonal):
+    X_train, X_test = X_seasonal.iloc[train_index], X_seasonal.iloc[test_index]
+    y_train, y_test = y_seasonal.iloc[train_index], y_seasonal.iloc[test_index]
+
+    # Train the model
+    model_ts = LinearRegression()
+    model_ts.fit(X_train, y_train)
+
+    # Make predictions
+    y_pred_ts = model_ts.predict(X_test)
+
+    # Evaluate metrics
+    mae = mean_absolute_error(y_test, y_pred_ts)
+    mse = mean_squared_error(y_test, y_pred_ts)
+    rmse = np.sqrt(mse)
+    r2 = r2_score(y_test, y_pred_ts)
+
+    # Append metrics to lists
+    mae_scores.append(mae)
+    mse_scores.append(mse)
+    rmse_scores.append(rmse)
+    r2_scores.append(r2)
+
+    # Feature importance
+    coef_df_ts = pd.DataFrame({
+        'Feature': X_seasonal.columns,
+        'Coefficient': model_ts.coef_
+    })
+
+    # Display results
+    print("Coefficients_ts:\n", coef_df_ts)
+
+# Print the average performance across all splits
+print(f"Mean Absolute Error (MAE): {np.mean(mae_scores):.2f}")
+print(f"Mean Squared Error (MSE): {np.mean(mse_scores):.2f}")
+print(f"Root Mean Squared Error (RMSE): {np.mean(rmse_scores):.2f}")
+print(f"R-squared (R2): {np.mean(r2_scores):.4f}")
+
+plt.plot(range(1, len(rmse_scores) + 1), rmse_scores, marker='o', label='RMSE')
+plt.title('RMSE over Time Series Cross-Validation')
+plt.xlabel('Fold')
+plt.ylabel('RMSE')
+plt.show()
+
+# Visualize coefficients for better understanding of feature importance
+coef_df_ts['Absolute_Coefficient'] = coef_df_ts['Coefficient'].abs()
+coef_df_ts_sorted = coef_df_ts.sort_values(by='Absolute_Coefficient', ascending=False)
+
+# Plot top 10 most important features
+top_features = coef_df_ts_sorted.head(10)
+plt.barh(top_features['Feature'], top_features['Absolute_Coefficient'])
+plt.xlabel('Absolute Coefficient Value')
+plt.title('Top 10 Features by Importance')
+plt.show()
